@@ -1,0 +1,123 @@
+import { Client, GatewayIntentBits, EmbedBuilder } from 'discord.js';
+import express from 'express';
+import axios from 'axios';
+
+// -----------------------------------------------------------------
+// 🔑 CREDENTIALS CONFIGURATION
+// -----------------------------------------------------------------
+const DISCORD_TOKEN = "YOUR_DISCORD_BOT_SECRET_TOKEN";
+const ALERTS_CHANNEL_ID = "YOUR_DISCORD_CHANNEL_STR_ID"; 
+
+const TB_HOST = "mqtt.thingsboard.cloud";
+const DEVICE_TOKEN = "c504c438j5825gj40x7b"; // Your device access token
+
+// -----------------------------------------------------------------
+// 🤖 DISCORD CLIENT INITIALIZATION
+// -----------------------------------------------------------------
+const bot = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+bot.once('ready', () => {
+    console.log(`🟢 Discord Command Bot running smoothly as: ${bot.user.tag}`);
+});
+
+bot.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.content.startsWith('!')) return;
+
+    const args = message.content.slice(1).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
+    // 🌐 COMMAND 1: !status (On-Demand Environment Pull)
+    if (command === 'status') {
+        const waitingMsg = await message.channel.send("🔄 Pinging ThingsBoard cloud storage...");
+        try {
+            const response = await axios.get(`https://${TB_HOST}/api/v1/${DEVICE_TOKEN}/telemetry`);
+            const data = response.data;
+
+            const temp = data.temperature ? data.temperature[0].value : "N/A";
+            const hum = data.humidity ? data.humidity[0].value : "N/A";
+            const gas = data.gasValue ? data.gasValue[0].value : "N/A";
+
+            const embed = new EmbedBuilder()
+                .setTitle("🌤️ Smart Station Environmental Status")
+                .setColor(0x3498db)
+                .addFields(
+                    { name: "🌡️ Temperature", value: `${temp}°C`, inline: true },
+                    { name: "💧 Humidity", value: `${hum}%`, inline: true },
+                    { name: "☣️ Gas Reading", value: `${gas}`, inline: true }
+                )
+                .setTimestamp();
+
+            await waitingMsg.delete();
+            await message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            await waitingMsg.edit(`❌ API Retrieval Failure: ${err.message}`);
+        }
+    }
+
+    // 📈 COMMAND 2: !setmax [number]
+    if (command === 'setmax') {
+        const val = parseFloat(args[0]);
+        if (isNaN(val)) return message.reply("⚠️ Syntax Error. Please use: `!setmax 32.5`");
+
+        try {
+            await axios.post(`https://${TB_HOST}/api/v1/${DEVICE_TOKEN}/telemetry`, { maxTemp: val });
+            await message.reply(`✅ Success! Maximum ceiling updated to **${val}°C** inside ThingsBoard.`);
+        } catch (err) {
+            await message.reply(`❌ Failed to synchronize attribute: ${err.message}`);
+        }
+    }
+
+    // 📉 COMMAND 3: !setmin [number]
+    if (command === 'setmin') {
+        const val = parseFloat(args[0]);
+        if (isNaN(val)) return message.reply("⚠️ Syntax Error. Please use: `!setmin 16`");
+
+        try {
+            await axios.post(`https://${TB_HOST}/api/v1/${DEVICE_TOKEN}/telemetry`, { minTemp: val });
+            await message.reply(`✅ Success! Minimum floor updated to **${val}°C** inside ThingsBoard.`);
+        } catch (err) {
+            await message.reply(`❌ Failed to synchronize attribute: ${err.message}`);
+        }
+    }
+});
+
+// -----------------------------------------------------------------
+// 🕸️ EXPRESS SERVER SETUP (For Webhook Reception)
+// -----------------------------------------------------------------
+const app = express();
+app.use(express.json());
+
+app.post('/tb-alert', async (req, res) => {
+    try {
+        const telemetry = req.body;
+        const currentTemp = telemetry.temperature;
+        
+        const channel = await bot.channels.fetch(ALERTS_CHANNEL_ID);
+        if (channel) {
+            const embed = new EmbedBuilder()
+                .setTitle("🚨 CRITICAL CLIMATE ALERT")
+                .setDescription(`An anomaly occurred! Sensor readings breached your custom thresholds.`)
+                .setColor(0xe74c3c)
+                .addFields(
+                    { name: "Current Temp", value: `${currentTemp}°C`, inline: true },
+                    { name: "Humidity Context", value: `${telemetry.humidity}%`, inline: true }
+                )
+                .setTimestamp();
+
+            await channel.send({ embeds: [embed] });
+        }
+        res.status(200).json({ success: true });
+    } catch (err) {
+        console.error("Webhook processing block error:", err);
+        res.status(500).send("Discord channel injection crash");
+    }
+});
+
+app.listen(8080, () => console.log("🕸️ Local Express server active on port 8080"));
+bot.login(DISCORD_TOKEN);
