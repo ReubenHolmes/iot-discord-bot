@@ -268,7 +268,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
           components: [
             {
               type: MessageComponentTypes.TEXT_DISPLAY,
-              content: `Thresholds Updated`
+              content: `Thresholds Updated to:\n\`\`\`Min Temperature: ${alarmThresholds.minTemp}\nMax Temperature: ${alarmThresholds.maxTemp}\nMin Humidity:    ${alarmThresholds.minHumid}\nMax Humidity:    ${alarmThresholds.maxHumid}\nMin Gas Level:   ${alarmThresholds.minGas}\nMax Gas Level:   ${alarmThresholds.maxGas}\n\`\`\``
             }
           ]
         },
