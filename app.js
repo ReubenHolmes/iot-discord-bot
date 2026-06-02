@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
+import axios from 'axios';
 import {
-  ButtonStyleTypes,
   InteractionResponseFlags,
   InteractionResponseType,
   InteractionType,
@@ -9,8 +9,6 @@ import {
   verifyKeyMiddleware,
 } from 'discord-interactions';
 import { getRandomEmoji, DiscordRequest } from './utils.js';
-import { getShuffledOptions, getResult } from './game.js';
-import axios from 'axios';
 
 const { TB_HOST, DEVICE_TOKEN, API_TOKEN, DISCORD_CHANNEL_ID } = process.env;
 
